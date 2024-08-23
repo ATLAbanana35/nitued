@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nitued</title>
+    <style>
+      body {
+        font-size: 150%;
+        background: url(./bg.jpg);
+        background-size: cover;
+        color: black;
+        font-family: Arial, Helvetica, sans-serif;
+        background-position: 0 0;
+      }
+      .button {
+        cursor: pointer;
+        background-color: rgba(255, 255, 255, 0.143);
+        backdrop-filter: blur(5px);
+        height: fit-content;
+        width: fit-content;
+        padding: 20px;
+        box-shadow: inset 0 0 7px white;
+        border-radius: 20px;
+        transition: 0.3s;
+      }
+      .button:hover {
+        transform: translateY(-10px);
+      }
+      .button:active {
+        backdrop-filter: blur(0px);
+        box-shadow: inset 0 0 0px white;
+        border-radius: 25px;
+      }
+      main {
+        width: 50%;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        display: grid;
+        grid-template-columns: auto auto auto;
+        align-items: center;
+        height: 50%;
+        overflow: scroll;
+      }
+      .glass {
+        background-color: rgba(255, 255, 255, 0.143);
+        backdrop-filter: blur(5px);
+        height: fit-content;
+        width: fit-content;
+        padding: 20px;
+        border-radius: 20px;
+      }
+      .middle {
+        display: flex;
+        flex-direction: column;
+        align-content: center;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .ncoins {
+        position: absolute;
+        z-index: 2;
+        top: 0;
+        right: 0;
+      }
+      .news {
+        position: absolute;
+        left: 10%;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .create_party {
+        right: 0;
+        bottom: 0;
+        position: absolute;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .create_party .button {
+        width: 100%;
+        text-align: center;
+      }
+      .play {
+        background-color: rgb(163, 158, 6);
+        box-shadow: inset 0 0 7px yellow;
+      }
+      nav {
+        position: absolute;
+        left: 0;
+        top: 0;
+        display: flex;
+        height: 10%;
+        width: 100% !important;
+        padding: 0 !important;
+        justify-content: space-around;
+      }
+      .case {
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="ncoins glass">
+      <b><span class="coin"></span></b> 🪙
+    </div>
+    <nav class="glass">
+      <a class="button" href="./play.html">Play</a>
+      <a class="button" href="./skin.html">Skin</a>
+      <a class="button" href="./shop.html">Shop</a>
+      <a class="button" href="./settings.html">Account + Server Address</a>
+    </nav>
+    <section class="news glass">News: <span class="news"></span></section>
+    <main></main>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="./lib.request.js"></script>
+    <script>
+      const newsXML = new XMLHttpRequest();
+      newsXML.open("GET", "news.txt");
+      newsXML.onload = () => {
+        document.querySelector(".news").innerHTML = newsXML.responseText;
+      };
+      newsXML.send();
+      request(
+        localStorage.getItem("server"),
+        (result) => {
+          const result_obj = JSON.parse(result);
+          for (const skinName in result_obj) {
+            if (Object.hasOwnProperty.call(result_obj, skinName)) {
+              const price = result_obj[skinName];
+              const mainCase = document.createElement("div");
+              mainCase.classList.add("case");
+              mainCase.classList.add("glass");
+              mainCase.innerHTML = `
+              <img src="./skins/${skinName}.png" alt="Skin" width="100" />
+              ${skinName} ${price} 🪙
+            `;
+              document.querySelector("main").appendChild(mainCase);
+              mainCase.addEventListener("click", () => {
+                Swal.fire({
+                  title: "Confirm your password to buy this object",
+                  input: "password",
+                  inputAttributes: {
+                    autocapitalize: "off",
+                  },
+                  showCancelButton: true,
+                  confirmButtonText: "Buy (" + price + " 🪙)",
+                  showLoaderOnConfirm: true,
+                  preConfirm: async (login) => {
+                    try {
+                      request(
+                        localStorage.getItem("server"),
+                        (r) => {
+                          Swal.fire({
+                            title: "Skin is successfully buyed!",
+                            text: "Now " + skinName + " is in your skins",
+                            icon: "success",
+                          }).then(() => {
+                            location.reload();
+                          });
+                        },
+                        {
+                          type: "buy_item",
+                          username: localStorage.getItem("username"),
+                          password: login,
+                          skin: skinName,
+                        }
+                      );
+                    } catch (error) {
+                      Swal.showValidationMessage(`
+        Request failed: ${error}
+      `);
+                    }
+                  },
+                  allowOutsideClick: () => !Swal.isLoading(),
+                });
+              });
+            }
+          }
+        },
+        {
+          type: "get_item_shop",
+          username: localStorage.getItem("username"),
+          password: localStorage.getItem("password"),
+        }
+      );
+      request(
+        localStorage.getItem("server"),
+        (result) => {
+          const result_obj = JSON.parse(result);
+          document.querySelector(".coin").textContent = result_obj.ncoins;
+        },
+        {
+          type: "get_user_infos",
+          username: localStorage.getItem("username"),
+          password: localStorage.getItem("password"),
+        }
+      );
+    </script>
+  </body>
+</html>

@@ -1,0 +1,2489 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Platformer Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="./lib.request.js"></script>
+
+    <style>
+      body {
+        user-select: none;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, Helvetica, sans-serif;
+        cursor: crosshair;
+      }
+      .storm {
+        transition: 1s;
+        background-color: rgba(255, 79, 176, 0.354);
+      }
+      .movable {
+        position: absolute;
+        transform-origin: center;
+      }
+      #gameArea {
+        position: absolute;
+        width: 100%;
+        top: 0;
+        left: 0;
+        height: 90vh;
+        overflow-x: scroll;
+        overflow-y: hidden;
+      }
+      .weapon {
+        top: 50px;
+        left: 30px;
+      }
+      .oplayer,
+      .oplayer * {
+        transition: 0.2s;
+      }
+      .player {
+        background-position: 0 0;
+        background-size: contain;
+        background-repeat: no-repeat;
+      }
+      .build {
+        background-image: url(./wood.jpg);
+        background-position: 50% 50%;
+        background-size: contain;
+      }
+      .preBuild {
+        background-color: rgba(75, 189, 255, 0.335);
+      }
+      .chest {
+        background-color: gold;
+      }
+      .bullet {
+        background-color: orange;
+        border-radius: 50%;
+      }
+      .groundSegment {
+        position: absolute;
+        height: 20px;
+        background-color: green; /* Brown */
+      }
+      #notSelected {
+        display: none;
+      }
+      @keyframes pickaxe {
+        0% {
+          transform: none;
+        }
+        50% {
+          transform: translateY(-20px) rotate(-45deg);
+        }
+        75% {
+          transform: translateY(0px) rotate(45deg);
+        }
+        100% {
+          transform: translateY(20px) rotate(90deg);
+        }
+      }
+      @keyframes change {
+        0% {
+          transform: rotate(-90deg);
+        }
+        100% {
+          transform: rotate(0deg);
+        }
+      }
+      th,
+      td {
+        border: 0.5px solid black;
+      }
+      .currentInvCase {
+        border: 3px solid red;
+      }
+      .marker {
+        position: absolute;
+        background-color: red;
+        transform-origin: center;
+        display: inline-block;
+        height: 20px;
+        width: 20px;
+        border: 1px solid black;
+        padding: 5px;
+        border-radius: 20%;
+      }
+      .item {
+        position: absolute;
+      }
+      .borderRadius {
+        border-radius: 50%;
+        background-image: url(./explosion.png);
+        background-position: 50% 50%;
+        background-size: contain;
+      }
+      .progressplayer[value]::-webkit-progress-bar {
+        background-color: #ff0000;
+      }
+
+      .progressplayer[value]::-webkit-progress-value {
+        background-color: green;
+      }
+
+      progress[value] {
+        /* Reset the default appearance */
+        width: 40%;
+        height: 4vh;
+        border: 10px solid black;
+        border-radius: 10px;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      .progressplayershield[value]::-webkit-progress-bar {
+        background-color: rgba(0, 0, 0, 0.228);
+      }
+
+      .progressplayershield[value]::-webkit-progress-value {
+        background-color: rgb(0, 132, 255);
+      }
+      .bars {
+        width: 100%;
+        display: flex;
+        justify-content: space-around;
+        height: 5vh;
+        position: absolute;
+        bottom: 2.5vh;
+        left: 0;
+      }
+      .dead {
+        display: none;
+      }
+      .winMessage {
+        animation: win 3s forwards;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+      }
+      @keyframes win {
+        0% {
+          transform: scale(0) translate(-50%, -50%);
+        }
+        100% {
+          transform: scale(5) translate(-50%, -50%);
+        }
+      }
+      .return {
+        position: absolute;
+        z-index: 2;
+      }
+      a {
+        color: black;
+        text-decoration: none;
+      }
+      .leftPlayerText {
+        position: absolute;
+        top: 0;
+        right: 0;
+        z-index: 2;
+        font-size: large;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="win"></div>
+
+    <div class="ui">
+      <table>
+        <tr>
+          <td class="c1 currentInvCase">1</td>
+          <td class="c2">2</td>
+          <td class="c3">3</td>
+        </tr>
+        <tr>
+          <td class="n1 currentInvCase">pickaxe</td>
+          <td class="n2">none</td>
+          <td class="n3">none</td>
+        </tr>
+      </table>
+    </div>
+    <div class="bars">
+      <button onclick="save()">Save Replay</button>
+
+      <progress
+        class="progressplayer"
+        id="playerhealth"
+        value="100"
+        max="100"
+      ></progress>
+      <progress
+        class="progressplayershield"
+        id="playershield"
+        value="100"
+        max="100"
+      ></progress>
+    </div>
+
+    <div id="gameArea"></div>
+    <div class="return"></div>
+    <div class="leftPlayerText">
+      Players left:
+      <div class="leftPlayer"></div>
+    </div>
+    <script>
+      let socket = new WebSocket(localStorage.getItem("gameServer"));
+      let replay = {
+        infos: {
+          startTime: new Date().getTime(),
+        },
+      };
+      setTimeout(() => {
+        playerLife = 100;
+        updateHealthBars();
+      }, 5000);
+      function time() {
+        return randint(0, 1000000) + ":d:" + new Date().getTime();
+      }
+      function download(data, filename, type) {
+        var file = new Blob([data], { type: type });
+        if (window.navigator.msSaveOrOpenBlob)
+          // IE10+
+          window.navigator.msSaveOrOpenBlob(file, filename);
+        else {
+          // Others
+          var a = document.createElement("a"),
+            url = URL.createObjectURL(file);
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(function () {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+          }, 0);
+        }
+      }
+      function save() {
+        download(
+          JSON.stringify(replay),
+          "replay.nituedreplay",
+          "application/json"
+        );
+      }
+      const items = {
+        pomp: {
+          audio: "./shotgun.mp3",
+          image: `<img src='shotgun.webp' height='70' class='movable item'></img>`,
+          width: 100,
+          h: 5,
+          w: 5,
+          damage: 10,
+          customFunction: function (f, t, n) {
+            if (!n) {
+              fire(f, { x: t.x, y: t.y + 10 }, 0.5, 25, false);
+              fire(f, { x: t.x, y: t.y - 10 }, 0.5, 25, false);
+              fire(f, { x: t.x, y: t.y + 20 }, 0.5, 25, false);
+              fire(f, { x: t.x, y: t.y - 20 }, 0.5, 25, false);
+            } else {
+              customFire(f, { x: t.x, y: t.y + 10 }, 0.5, 25);
+              customFire(f, { x: t.x, y: t.y - 10 }, 0.5, 25);
+              customFire(f, { x: t.x, y: t.y + 20 }, 0.5, 25);
+              customFire(f, { x: t.x, y: t.y - 20 }, 0.5, 25);
+            }
+          },
+
+          duration: 0.5,
+          isWeapon: true,
+          ammo: 1,
+          wait: 1000,
+        },
+        ar: {
+          audio: "./ar.mp3",
+          image: `<img src='ak47.png' height='40' class='movable item'></img>`,
+          width: 100,
+          h: 5,
+          w: 5,
+          damage: 10,
+          customFunction: function (f, t) {},
+          duration: 0.5,
+          isWeapon: true,
+          ammo: 10,
+          wait: 100,
+        },
+        snipe: {
+          audio: "./sniper.mp3",
+          image: `<img src='snipe.png' height='30' class='movable item'></img>`,
+          width: 100,
+          h: 5,
+          w: 10,
+          damage: 300,
+          customFunction: function (f, t) {},
+          duration: 2,
+          isWeapon: true,
+          ammo: 1,
+          wait: 2000,
+        },
+        shockwave: {
+          image: `<img src='./shockwave.png' height='50' class='movable item'></img>`,
+        },
+        medkit: {
+          image: `<img src='./medkit.webp' height='30' class='movable item'></img>`,
+        },
+        potion: {
+          image: `<img src='./potion.webp' height='40' class='movable item'></img>`,
+        },
+      };
+      const skins = {
+        default: {
+          src: "skins/default.png",
+          size: 100,
+        },
+        black_warrior: {
+          src: "skins/black_warrior.png",
+          size: 150,
+        },
+      };
+      let skin = localStorage.getItem("skin");
+      if (localStorage.getItem("skin") !== null) {
+        skin = localStorage.getItem("skin");
+      }
+      let inGameItems = [];
+      function generateItem(
+        x,
+        y,
+        id,
+        item_id = randint(0, 1000000),
+        net = true
+      ) {
+        const item = createElement("div", "", x, y, 50, 50, items[id].image);
+        if (net) {
+          socket.send(
+            JSON.stringify({
+              to: "relay",
+              type: "setItem",
+              data: { x: x, y: y, obj: id, item_id: item_id },
+            })
+          );
+        }
+        item.id = "i_" + item_id;
+        gameArea.appendChild(item);
+        item.addEventListener("click", () => {
+          if (inventory[1] === null) {
+            socket.send(
+              JSON.stringify({
+                to: "relay",
+                type: "takeItem",
+                data: { x: x, y: y, obj: id, item_id: item_id },
+              })
+            );
+            item.remove();
+            inventory[1] = id;
+            currentWeapon = id;
+            document.querySelector(".n" + 2).textContent = id;
+            change();
+          } else if (inventory[2] === null) {
+            socket.send(
+              JSON.stringify({
+                to: "relay",
+                type: "takeItem",
+                data: { x: x, y: y, obj: id, item_id: item_id },
+              })
+            );
+            item.remove();
+            inventory[2] = id;
+            currentWeapon = id;
+            document.querySelector(".n" + 3).textContent = id;
+            change();
+          } else {
+            if (currentWeapon !== "pickaxe") {
+              socket.send(
+                JSON.stringify({
+                  to: "relay",
+                  type: "takeItem",
+                  data: { x: x, y: y, obj: id, item_id: item_id },
+                })
+              );
+              generateItem(x, y, currentWeapon);
+              item.remove();
+              inventory[inventory.indexOf(currentWeapon)] = id;
+              currentWeapon = id;
+              document.querySelector(
+                ".n" + (inventory.indexOf(currentWeapon) + 1)
+              ).textContent = id;
+              change();
+            }
+          }
+        });
+        inGameItems.push({ velocityY: 0, item: item });
+        return { id: item_id, item: item, x: x, y: y, obj: id };
+      }
+      let playerLife = 100;
+      let playerShield = 0;
+      updateHealthBars();
+
+      function updateHealthBars() {
+        document.getElementById("playerhealth").value = playerLife;
+        document.getElementById("playershield").value = playerShield;
+      }
+      function TakeDamage(damage) {
+        if (playerShield > 0) {
+          if (playerShield - damage > 0) {
+            playerShield = playerShield - damage;
+            playAudio("./damageS.mp3");
+            updateHealthBars();
+            return false;
+          } else {
+            playerShield = 0;
+            playerLife + playerShield - damage;
+            playAudio("./glassbreak.mp3");
+            updateHealthBars();
+            return false;
+          }
+        } else {
+          if (playerLife - damage > 0) {
+            playerLife = playerLife - damage;
+            playAudio("./damageH.mp3");
+            updateHealthBars();
+            return false;
+          } else {
+            playerLife = 0;
+            updateHealthBars();
+            return true;
+          }
+        }
+      }
+      let markers = [];
+      function moveElementToTarget(
+        element,
+        targetX,
+        targetY,
+        durationInSeconds,
+        loop = () => {}
+      ) {
+        const startX = element.offsetLeft;
+        const startY = element.offsetTop;
+        const deltaX = targetX - startX;
+        const deltaY = targetY - startY;
+        const durationInMilliseconds = durationInSeconds * 1000;
+        const startTime = performance.now();
+
+        function animate(currentTime) {
+          const elapsedTime = currentTime - startTime;
+          const progress = Math.min(elapsedTime / durationInMilliseconds, 1);
+
+          element.style.left = startX + deltaX * progress + "px";
+          element.style.top = startY + deltaY * progress + "px";
+          if (loop()) {
+            element.remove();
+          } else {
+            if (progress < 1) {
+              requestAnimationFrame(animate);
+            } else {
+              element.remove();
+            }
+          }
+        }
+
+        requestAnimationFrame(animate);
+      }
+      function fire(f, t, dur, damage, net = true) {
+        const element = createElement(
+          "div",
+          "bullet",
+          f.x,
+          f.y,
+          5,
+          5,
+          "",
+          false
+        );
+        gameArea.appendChild(element);
+        moveElementToTarget(element, t.x, t.y, dur, (e) => {
+          let value = false;
+          colliders.forEach((collider) => {
+            if (isColliding(element, collider)) {
+              value = true;
+              if (net) {
+                if (collider.dataset["isbuild"] === "true" && net) {
+                  const build = builds[Number(collider.dataset["buildid"])];
+                  build.life -= damage;
+                  if (build.life <= 0) {
+                    build.elements.forEach((buildPart) => {
+                      console.log(colliders[colliders.indexOf(buildPart)]);
+                      socket.send(
+                        JSON.stringify({
+                          to: "relay",
+                          type: "removeCollider",
+                          data: {
+                            id:
+                              "" +
+                              colliders[colliders.indexOf(buildPart)].dataset[
+                                "id"
+                              ],
+                          },
+                        })
+                      );
+                      if (colliders.indexOf(buildPart) !== -1) {
+                        colliders.splice(colliders.indexOf(buildPart), 1);
+                      }
+                      if (buildPart !== null) {
+                        buildPart.remove();
+                      }
+                    });
+                    socket.send(
+                      JSON.stringify({
+                        to: "every",
+                        type: "rmBuild",
+                        data: buildid,
+                      })
+                    );
+                    delete builds[buildid];
+                  }
+                }
+              }
+            }
+          });
+
+          players.forEach((plays) => {
+            if (isColliding(element, plays)) {
+              if (net) {
+                socket.send(
+                  JSON.stringify({
+                    to: plays.dataset["uid"],
+                    type: "TakeDamage",
+                    data: {
+                      damage: damage,
+                    },
+                  })
+                );
+              }
+              value = true;
+            }
+          });
+          return value;
+        });
+      }
+      function customFire(f, t, dur, damage) {
+        const element = createElement(
+          "div",
+          "bullet",
+          f.x,
+          f.y,
+          5,
+          5,
+          "",
+          false
+        );
+        gameArea.appendChild(element);
+        moveElementToTarget(element, t.x, t.y, dur, (e) => {
+          let value = false;
+          colliders.forEach((collider) => {
+            if (isColliding(element, collider)) {
+              value = true;
+              if (net) {
+                if (collider.dataset["isbuild"] === "true") {
+                  const build = builds[Number(collider.dataset["buildid"])];
+                  build.life -= damage;
+                  if (build.life <= 0) {
+                    build.elements.forEach((buildPart) => {
+                      console.log(colliders[colliders.indexOf(buildPart)]);
+                      socket.send(
+                        JSON.stringify({
+                          to: "relay",
+                          type: "removeCollider",
+                          data: {
+                            id:
+                              "" +
+                              colliders[colliders.indexOf(buildPart)].dataset[
+                                "id"
+                              ],
+                          },
+                        })
+                      );
+                      if (colliders.indexOf(buildPart) !== -1) {
+                        colliders.splice(colliders.indexOf(buildPart), 1);
+                      }
+                      if (buildPart !== null) {
+                        buildPart.remove();
+                      }
+                    });
+                    socket.send(
+                      JSON.stringify({
+                        to: "every",
+                        type: "rmBuild",
+                        data: buildid,
+                      })
+                    );
+                    delete builds[buildid];
+                  }
+                }
+              }
+            }
+          });
+          players.forEach((plays) => {
+            if (isColliding(element, plays)) {
+              socket.send(
+                JSON.stringify({
+                  to: plays.dataset["uid"],
+                  type: "TakeDamage",
+                  data: {
+                    damage: damage,
+                  },
+                })
+              );
+              value = true;
+            }
+          });
+          return value;
+        });
+      }
+
+      function animateFunction(callback, iterations, durationInSeconds) {
+        const durationInMilliseconds = durationInSeconds * 1000 * speed;
+        const iterationDuration = durationInMilliseconds / iterations;
+        let currentIteration = 0;
+        const startTime = performance.now();
+
+        function animate(currentTime) {
+          const elapsedTime = currentTime - startTime;
+
+          // Calculate the current iteration based on elapsed time
+          const newIteration = Math.floor(elapsedTime / iterationDuration);
+
+          // If the new iteration is different from the current one, call the callback
+          if (newIteration > currentIteration) {
+            currentIteration = newIteration;
+            callback(currentIteration);
+          }
+
+          // Continue the animation if there are iterations left
+          if (currentIteration < iterations) {
+            requestAnimationFrame(animate);
+          } else {
+            // Ensure the callback is called for the last iteration if time exceeded
+            callback(iterations);
+          }
+        }
+
+        requestAnimationFrame(animate);
+      }
+      function createMarker(element) {
+        const marker = document.createElement("div");
+        marker.classList.add("marker");
+        const markerClass = "marker_" + randint(0, 1000000);
+        marker.classList.add(markerClass);
+        document.getElementById("gameArea").appendChild(marker);
+        return markers.push([marker, markerClass, element]);
+      }
+      function updateMarkers() {
+        const viewportWidth = document.getElementById("gameArea").offsetWidth;
+        const viewportHeight = document.getElementById("gameArea").offsetHeight;
+        const scrollLeft = document.getElementById("gameArea").scrollLeft;
+        const scrollTop = document.getElementById("gameArea").scrollTop;
+        markers.forEach((markerObj) => {
+          const element = markerObj[0];
+          const elementClass = markerObj[1];
+          const pos = { x: markerObj[2].offsetLeft, y: markerObj[2].offsetTop };
+          const element_ = document.querySelector("." + elementClass);
+          if (markerObj[2].offsetLeft === 0 && markerObj[2].offsetTop === 0) {
+            element_.remove();
+            delete markers[markers.indexOf(markerObj)];
+          }
+          let markerX = pos.x;
+          let markerY = pos.y;
+          if (pos.x < scrollLeft) {
+            markerX = scrollLeft;
+          } else if (pos.x > scrollLeft + viewportWidth) {
+            markerX = scrollLeft + viewportWidth - element_.offsetWidth;
+          }
+          // Update marker position
+          element_.style.left = `${markerX}px`;
+          element_.style.top = `${markerY}px`;
+          element_.textContent = Math.floor(
+            Math.sqrt(
+              (pos.y - py) * (pos.y - py) + (pos.x - px) * (pos.x - px)
+            ) / 100
+          );
+        });
+      }
+
+      function randint(min, max) {
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(Math.random() * (max - min + 1) + min);
+      }
+      const colliders = [];
+      const builds = {};
+      let TMP_Build_Preview = [];
+      function GenerateBuildPreview(buildType, x1, y1) {
+        TMP_Build_Preview.forEach((element) => {
+          element.remove();
+        });
+        TMP_Build_Preview = [];
+        const x = Math.floor(x1 / 333) * 333;
+        const y = Math.floor((y1 + 333) / 333) * 333;
+        if (buildType === "wall") {
+          const groundSegment = createElement(
+            "div",
+            "preBuild",
+            x,
+            Math.floor(y1 / 333) * 333,
+            33,
+            333,
+            ""
+          );
+          TMP_Build_Preview = [groundSegment];
+          gameArea.appendChild(groundSegment);
+        } else if (buildType === "floor") {
+          const groundSegment = createElement(
+            "div",
+            "preBuild",
+            x,
+            Math.floor(y1 / 333) * 333 + 300,
+            333,
+            33,
+            ""
+          );
+          gameArea.appendChild(groundSegment);
+          TMP_Build_Preview = [groundSegment];
+        } else if (buildType === "cone") {
+          const buildid = randint(0, 1000000);
+          const segments = [];
+          for (let i = 0; i < 5; i++) {
+            const x1 = x + i * 30;
+            const y1 = y - i * 30;
+            const groundSegment = createElement(
+              "div",
+              "preBuild",
+              x1,
+              y1,
+              30,
+              30,
+              ""
+            );
+            segments.push(groundSegment);
+            gameArea.appendChild(groundSegment);
+          }
+          for (let i = 0; i < 6; i++) {
+            const x1 = x + 30 * 5 + i * 30;
+            const y1 = y - 30 * 5 + i * 30;
+            const groundSegment = createElement(
+              "div",
+              "preBuild",
+              x1,
+              y1,
+              30,
+              30,
+              ""
+            );
+            segments.push(groundSegment);
+            gameArea.appendChild(groundSegment);
+          }
+          TMP_Build_Preview = segments;
+        } else if (buildType === "ramp") {
+          const buildid = randint(0, 1000000);
+          const segments = [];
+          for (let i = 0; i < 11; i++) {
+            const x1 = x + i * 30;
+            const y1 = y - i * 30 * rampDir - (rampDir === -1 ? 333 : 0);
+            const groundSegment = createElement(
+              "div",
+              "preBuild",
+              x1,
+              y1,
+              30,
+              30,
+              ""
+            );
+            segments.push(groundSegment);
+
+            gameArea.appendChild(groundSegment);
+          }
+          TMP_Build_Preview = segments;
+        }
+      }
+      function generateBuild(buildType, x1, y1) {
+        const x = Math.floor(x1 / 333) * 333;
+        const y = Math.floor((y1 + 333) / 333) * 333;
+        if (document.querySelector(".x" + x + "y" + y) !== null) {
+          return;
+        }
+        if (buildType === "wall") {
+          const groundSegment = createElement(
+            "div",
+            "build x" + x + "y" + y,
+            x,
+            Math.floor(y1 / 333) * 333,
+            33,
+            333,
+            "",
+            true
+          );
+          const buildid = randint(0, 1000000);
+          groundSegment.dataset["isbuild"] = "true";
+          groundSegment.dataset["buildid"] = buildid;
+          gameArea.appendChild(groundSegment);
+          builds[buildid] = {
+            type: buildType,
+            x,
+            y,
+            elements: [groundSegment],
+            life: 50,
+          };
+          const segments_ = [];
+          builds[buildid].elements.forEach((element) => {
+            segments_.push(element.id);
+          });
+          socket.send(
+            JSON.stringify({
+              to: "every",
+              type: "addBuild",
+              data: {
+                id: buildid,
+                type: buildType,
+                x: x,
+                y: y,
+                elements: segments_,
+                life: 50,
+              },
+            })
+          );
+          colliders.push(groundSegment);
+        } else if (buildType === "floor") {
+          const groundSegment = createElement(
+            "div",
+            "build x" + x + "y" + y,
+            x,
+            Math.floor(y1 / 333) * 333 + 300,
+            333,
+            33,
+            "",
+            true
+          );
+          const buildid = randint(0, 1000000);
+          groundSegment.dataset["isbuild"] = "true";
+          groundSegment.dataset["buildid"] = buildid;
+          gameArea.appendChild(groundSegment);
+          builds[buildid] = {
+            type: buildType,
+            x,
+            y,
+            elements: [groundSegment],
+            life: 50,
+          };
+          const segments_ = [];
+          builds[buildid].elements.forEach((element) => {
+            segments_.push(element.id);
+          });
+          socket.send(
+            JSON.stringify({
+              to: "every",
+              type: "addBuild",
+              data: {
+                id: buildid,
+                type: buildType,
+                x: x,
+                y: y,
+                elements: segments_,
+                life: 50,
+              },
+            })
+          );
+
+          colliders.push(groundSegment);
+        } else if (buildType === "cone") {
+          const buildid = randint(0, 1000000);
+          const segments = [];
+          for (let i = 0; i < 5; i++) {
+            const x1 = x + i * 30;
+            const y1 = y - i * 30;
+            const groundSegment = createElement(
+              "div",
+              "build x" + x + "y" + y,
+              x1,
+              y1,
+              30,
+              30,
+              "",
+              true
+            );
+            groundSegment.dataset["isbuild"] = "true";
+            segments.push(groundSegment);
+
+            groundSegment.dataset["buildid"] = buildid;
+            gameArea.appendChild(groundSegment);
+            colliders.push(groundSegment);
+          }
+          for (let i = 0; i < 6; i++) {
+            const x1 = x + 30 * 5 + i * 30;
+            const y1 = y - 30 * 5 + i * 30;
+            const groundSegment = createElement(
+              "div",
+              "build x" + x + "y" + y,
+              x1,
+              y1,
+              30,
+              30,
+              "",
+              true
+            );
+            segments.push(groundSegment);
+            groundSegment.dataset["isbuild"] = "true";
+            groundSegment.dataset["buildid"] = buildid;
+            colliders.push(groundSegment);
+            gameArea.appendChild(groundSegment);
+          }
+
+          builds[buildid] = {
+            type: buildType,
+            x,
+            y,
+            elements: segments,
+            life: 50,
+          };
+          const segments_ = [];
+          builds[buildid].elements.forEach((element) => {
+            segments_.push(element.id);
+          });
+          socket.send(
+            JSON.stringify({
+              to: "every",
+              type: "addBuild",
+              data: {
+                id: buildid,
+                type: buildType,
+                x: x,
+                y: y,
+                elements: segments_,
+                life: 50,
+              },
+            })
+          );
+        } else if (buildType === "ramp") {
+          const buildid = randint(0, 1000000);
+          const segments = [];
+          for (let i = 0; i < 11; i++) {
+            const x1 = x + i * 30;
+            const y1 = y - i * 30 * rampDir - (rampDir === -1 ? 333 : 0);
+            const groundSegment = createElement(
+              "div",
+              "build x" + x + "y" + y,
+              x1,
+              y1,
+              30,
+              30,
+              "",
+              true
+            );
+            groundSegment.dataset["isbuild"] = "true";
+            groundSegment.dataset["buildid"] = buildid;
+            segments.push(groundSegment);
+            colliders.push(groundSegment);
+            gameArea.appendChild(groundSegment);
+          }
+
+          builds[buildid] = {
+            type: buildType,
+            x,
+            y,
+            elements: segments,
+            life: 50,
+          };
+          const segments_ = [];
+          builds[buildid].elements.forEach((element) => {
+            segments_.push(element.id);
+          });
+          socket.send(
+            JSON.stringify({
+              to: "every",
+              type: "addBuild",
+              data: {
+                id: buildid,
+                type: buildType,
+                x: x,
+                y: y,
+                elements: segments_,
+                life: 50,
+              },
+            })
+          );
+        }
+      }
+      let isPickaxing = false;
+      function damageBuild(x, y) {
+        const x_ = Math.floor(x / 333) * 333;
+        const y_ = Math.floor((y + 333) / 333) * 333;
+        for (const buildid in builds) {
+          if (Object.hasOwnProperty.call(builds, buildid)) {
+            const build = builds[buildid];
+            if (build.x === x_ && build.y === y_) {
+              build.life -= 20;
+              if (build.life <= 0) {
+                build.elements.forEach((buildPart) => {
+                  console.log(colliders[colliders.indexOf(buildPart)]);
+                  socket.send(
+                    JSON.stringify({
+                      to: "relay",
+                      type: "removeCollider",
+                      data: {
+                        id: colliders[colliders.indexOf(buildPart)].dataset[
+                          "id"
+                        ],
+                      },
+                    })
+                  );
+                  if (colliders.indexOf(buildPart) !== -1) {
+                    colliders.splice(colliders.indexOf(buildPart), 1);
+                  }
+                  if (buildPart !== null) {
+                    buildPart.remove();
+                  }
+                });
+                socket.send(
+                  JSON.stringify({
+                    to: "every",
+                    type: "rmBuild",
+                    data: buildid,
+                  })
+                );
+                delete builds[buildid];
+              }
+            }
+          }
+        }
+      }
+      function damageBuildById(id) {
+        delete builds[id];
+      }
+      function isColliding(element1, element2, margin = 0) {
+        const rect1 = element1.getBoundingClientRect();
+        const rect2 = element2.getBoundingClientRect();
+
+        if (
+          !(
+            rect1.top > rect2.bottom + margin ||
+            rect1.bottom < rect2.top - margin ||
+            rect1.left > rect2.right + margin ||
+            rect1.right < rect2.left - margin
+          )
+        ) {
+          if (
+            rect2.top + 1 < rect1.bottom &&
+            rect2.bottom - 1 > rect1.bottom &&
+            velocityY < 0
+          ) {
+            TouchHight = true;
+            velocityY = 1;
+          }
+          if (
+            rect1.right > rect2.right &&
+            rect1.left < rect2.right &&
+            rect2.bottom - 10 > rect1.top &&
+            rect2.top - 10 < rect1.bottom
+          ) {
+            TMP_touch = 1;
+            px -= 10;
+          } else if (
+            rect1.right > rect2.left &&
+            rect1.left < rect2.left &&
+            rect2.bottom - 10 > rect1.top &&
+            rect2.top - 10 < rect1.bottom
+          ) {
+            TMP_touch = 1;
+            px += 10;
+          }
+          return true;
+        }
+
+        return false;
+      }
+      let lastShoot = 0;
+      function generateDrop(data = null) {
+        const obj_id = randint(0, 5);
+        let obj = "";
+        switch (obj_id) {
+          case 0:
+            obj = "pomp";
+            break;
+          case 1:
+            obj = "ar";
+            break;
+          case 2:
+            obj = "snipe";
+            break;
+          case 3:
+            obj = "shockwave";
+            break;
+          case 4:
+            obj = "medkit";
+            break;
+          case 5:
+            obj = "potion";
+            break;
+        }
+        let x = randint(0, gameArea.scrollWidth);
+        if (data !== null) {
+          obj = data["obj"];
+          x = data["x"];
+        }
+        let element = createElement("div", "chest", x, 0, 100, 50, "");
+        element.dataset["rewards"] = obj;
+        document.querySelector("#gameArea").appendChild(element);
+        element.addEventListener("click", () => {
+          socket.send(
+            JSON.stringify({
+              to: "relay",
+              type: "openChest",
+              data: { x: x, obj: obj },
+            })
+          );
+          generateItem(x + randint(-100, 100), y - 50, obj);
+          if (markers[index]) {
+            marker = markers[index][0];
+            delete markers[index];
+            markers.sort();
+            marker.remove();
+          }
+          element.remove();
+        });
+        let y = 0;
+        let yVel = 0;
+        function moveDown() {
+          yVel += 0.1;
+          y += yVel;
+          moveElement(element, x, y);
+          if (!isTouching(element)) {
+            requestAnimationFrame(moveDown);
+          } else {
+            if (data === null) {
+              socket.send(
+                JSON.stringify({
+                  to: "relay",
+                  type: "setChest",
+                  data: { x: x, obj: obj },
+                })
+              );
+            }
+            element.dataset["syncPos"] = "no";
+          }
+        }
+        const index = createMarker(element);
+        moveDown();
+      }
+      function moveElement(element, x, y, scale = 1, forceNoNetwork = false) {
+        if (element.dataset["syncPos"] === "yes" && !forceNoNetwork) {
+          socket.send(
+            JSON.stringify({
+              to: "relay",
+              type: "updateCollider",
+              data: {
+                id: element.dataset["id"],
+                x: x,
+                y: y,
+                s: scale,
+              },
+            })
+          );
+        }
+        element.style.transform = `scaleX(${scale})`;
+        element.style.left = x + "px";
+        element.style.top = y + "px";
+      }
+      function jump(height) {
+        velocityY = -height;
+      }
+      let isChanging = false;
+      function createElement(
+        type,
+        className,
+        x,
+        y,
+        width,
+        height,
+        innerHTML = "",
+        net = false,
+        id_plain = randint(0, 1000000),
+        isCollider = true
+      ) {
+        const element = document.createElement(type);
+        element.className = className;
+        element.style.position = "absolute";
+        element.dataset["id"] = id_plain;
+        element.dataset["syncPos"] = "yes";
+        const id = "e_" + element.dataset["id"];
+        element.id = id;
+        element.style.left = `${x}px`;
+        element.innerHTML = innerHTML;
+        element.style.top = `${y}px`;
+        element.style.width = `${width}px`;
+        element.style.height = `${height}px`;
+        if (net) {
+          socket.send(
+            JSON.stringify({
+              to: "relay",
+              type: "setCollider",
+              data: {
+                id: element.dataset["id"],
+                type: type,
+                class: className,
+                x: x,
+                y: y,
+                width: width,
+                height: height,
+                innerHTML: innerHTML,
+                c: isCollider,
+              },
+            })
+          );
+        }
+        return element;
+      }
+      let player;
+      let playerScale = 1;
+      const keysPressed = new Set();
+      document.addEventListener("keydown", (event) => {
+        keysPressed.add(event.key.toLowerCase());
+        if (keysPressed.has("c")) {
+          ramp = !ramp;
+          cone = false;
+          floor = false;
+          wall = false;
+          TMP_Build_Preview.forEach((element) => {
+            element.remove();
+          });
+          TMP_Build_Preview = [];
+        }
+        if (keysPressed.has("z")) {
+          wall = !wall;
+          cone = false;
+          floor = false;
+          ramp = false;
+          TMP_Build_Preview.forEach((element) => {
+            element.remove();
+          });
+          TMP_Build_Preview = [];
+        }
+        if (keysPressed.has("x")) {
+          floor = !floor;
+          cone = false;
+          wall = false;
+          ramp = false;
+          TMP_Build_Preview.forEach((element) => {
+            element.remove();
+          });
+          TMP_Build_Preview = [];
+        }
+        if (keysPressed.has("v")) {
+          cone = !cone;
+          floor = false;
+          wall = false;
+          ramp = false;
+          TMP_Build_Preview.forEach((element) => {
+            element.remove();
+          });
+          TMP_Build_Preview = [];
+        }
+      });
+      document.addEventListener("keyup", (event) => {
+        keysPressed.delete(event.key.toLowerCase());
+      });
+      function playAudio(path, net = true) {
+        const audio = new Audio(path);
+        audio.play();
+        if (net) {
+          socket.send(
+            JSON.stringify({
+              to: "every",
+              type: "PlayAudio",
+              data: path,
+            })
+          );
+        }
+      }
+      let isMouseDown = false;
+      let mouseEvent = null;
+      let isReloading = false;
+      let changed = false;
+      let ReloadingStart = 0;
+      function change() {
+        changed = true;
+        player
+          .querySelectorAll(".weapon")
+          .forEach((e) => (e.style.display = "none"));
+        player
+          .querySelectorAll(".weapon")
+          .forEach((e) => (e.id = "notSelected"));
+        if (currentWeapon === "ar") {
+          player.querySelector(".ar").style.display = "block";
+          player.querySelector(".ar").id = "current";
+          player.querySelector(".ar").style.animation = "change 1s forwards";
+        } else if (currentWeapon === "snipe") {
+          player.querySelector(".snipe").style.display = "block";
+          player.querySelector(".snipe").id = "current";
+          player.querySelector(".snipe").style.animation = "change 1s forwards";
+        } else if (currentWeapon === "pickaxe") {
+          player.querySelector(".pickaxe").style.display = "block";
+          player.querySelector(".pickaxe").id = "current";
+          player.querySelector(".pickaxe").style.animation =
+            "change 1s forwards";
+        } else if (currentWeapon === "pomp") {
+          player.querySelector(".pomp").style.display = "block";
+          player.querySelector(".pomp").id = "current";
+          player.querySelector(".pomp").style.animation = "change 1s forwards";
+        } else if (currentWeapon === "shockwave") {
+          player.querySelector(".shockwave").style.display = "block";
+          player.querySelector(".shockwave").id = "current";
+          player.querySelector(".shockwave").style.animation =
+            "change 1s forwards";
+        } else if (currentWeapon === "medkit") {
+          player.querySelector(".medkit").style.display = "block";
+          player.querySelector(".medkit").id = "current";
+          player.querySelector(".medkit").style.animation =
+            "change 1s forwards";
+        } else if (currentWeapon === "potion") {
+          player.querySelector(".potion").style.display = "block";
+          player.querySelector(".potion").id = "current";
+          player.querySelector(".potion").style.animation =
+            "change 1s forwards";
+        }
+        isChanging = true;
+        setTimeout(() => {
+          player
+            .querySelectorAll(".weapon")
+            .forEach((e) => (e.style.animation = "none"));
+          isChanging = false;
+        }, 1000);
+      }
+      let cone = false;
+      let floor = false;
+      let wall = false;
+      let ramp = false;
+      let rampDir = 1;
+      document.addEventListener("wheel", (e) => {
+        if (ramp) {
+          rampDir = -rampDir;
+        }
+      });
+      function handleKeys(keysPressed) {
+        if (!isReloading) {
+          if (keysPressed.has("r")) {
+            isReloading = true;
+            ReloadingStart = new Date().getTime();
+            playAudio("./reload.mp3");
+          }
+          if (
+            keysPressed.has(" ") &&
+            playerTouchLR !== 1 &&
+            !isPlayerTouchingH
+          ) {
+            if (isTouching(player)) {
+              jump(5);
+            }
+          }
+          if (keysPressed.has("1") || keysPressed.has("f")) {
+            cone = false;
+            wall = false;
+            floor = false;
+            ramp = false;
+            TMP_Build_Preview.forEach((element) => {
+              element.remove();
+            });
+            TMP_Build_Preview = [];
+            document
+              .querySelector(".currentInvCase")
+              .classList.remove("currentInvCase");
+            document
+              .querySelector(".currentInvCase")
+              .classList.remove("currentInvCase");
+            document.querySelector(".n1").classList.add("currentInvCase");
+            document.querySelector(".c1").classList.add("currentInvCase");
+            currentWeapon = inventory[0];
+            change();
+          }
+          if (keysPressed.has("2")) {
+            cone = false;
+            floor = false;
+            wall = false;
+            ramp = false;
+            TMP_Build_Preview.forEach((element) => {
+              element.remove();
+            });
+            TMP_Build_Preview = [];
+            if (inventory[1] !== null) {
+              document
+                .querySelector(".currentInvCase")
+                .classList.remove("currentInvCase");
+              document
+                .querySelector(".currentInvCase")
+                .classList.remove("currentInvCase");
+              document.querySelector(".n2").classList.add("currentInvCase");
+              document.querySelector(".c2").classList.add("currentInvCase");
+              currentWeapon = inventory[1];
+            }
+            change();
+          }
+          if (keysPressed.has("3")) {
+            cone = false;
+            floor = false;
+            wall = false;
+            ramp = false;
+            TMP_Build_Preview.forEach((element) => {
+              element.remove();
+            });
+            TMP_Build_Preview = [];
+            if (inventory[2] !== null) {
+              document
+                .querySelector(".currentInvCase")
+                .classList.remove("currentInvCase");
+              document
+                .querySelector(".currentInvCase")
+                .classList.remove("currentInvCase");
+              document.querySelector(".n3").classList.add("currentInvCase");
+              document.querySelector(".c3").classList.add("currentInvCase");
+              currentWeapon = inventory[2];
+            }
+            change();
+          }
+
+          if (keysPressed.has("a")) {
+            if (keysPressed.has("shift")) {
+              px -= 5;
+            } else {
+              px -= 2.5;
+            }
+          }
+          if (keysPressed.has("d")) {
+            if (keysPressed.has("shift")) {
+              px += 5;
+            }
+            px += 2.5;
+          }
+        }
+      }
+      let ammo = [0, 0];
+      let currentWeapon = "pickaxe";
+      const inventory = ["pickaxe", null, null];
+      let isAttacking = false;
+      let currentAngle = 0;
+      function init() {
+        setInterval(() => {
+          const data = {
+            to: "every",
+            type: "updatePlayer",
+            data: {
+              playerID: playerUID,
+              x: Math.floor(px),
+              y: Math.floor(py),
+              s: playerScale,
+              l: playerLife,
+              sh: playerShield,
+              cur: currentWeapon,
+              ch: changed,
+              mx: mouseEvent.clientX,
+              my: mouseEvent.clientY,
+              a: currentAngle,
+              skin: skins[skin],
+            },
+          };
+          changed = false;
+          socket.send(JSON.stringify(data));
+        }, 100);
+        const gameArea = document.getElementById("gameArea");
+        player = createElement(
+          "div",
+          "player",
+          0,
+          0,
+          50,
+          200,
+          `<img src='PICKAXE.png' id='current' width='75' class='movable weapon pickaxe'></img>
+                      <img src='ak47.png' height='40' id='notSelected' class='movable weapon ar'></img>
+                      <img src='snipe.png' height='30' id='notSelected' class='movable weapon snipe'></img>
+                      <img src='shotgun.webp' height='70' id='notSelected' class='movable weapon pomp'></img>
+                      <img src='shockwave.png' height='50' id='notSelected' class='movable weapon shockwave'></img>
+                      <img src='medkit.webp' height='50' id='notSelected' class='movable weapon medkit'></img>
+                      <img src='potion.webp' height='40' id='notSelected' class='movable weapon potion'></img>`
+        );
+        player.style.backgroundImage = "url(" + skins[skin].src + ")";
+        if (player.size !== -1) {
+          player.style.width = skins[skin].size + "px";
+        }
+        gameArea.appendChild(player);
+        player.dataset["syncPos"] = "no";
+
+        const objects = document.querySelectorAll(".movable");
+        setInterval(() => {
+          document.querySelector(".leftPlayer").innerHTML = players.length + 1;
+        }, 200);
+
+        document.addEventListener("mousemove", (event) => {
+          mouseEvent = event;
+          if (!isAttacking && !isChanging) {
+            const mouseX = event.clientX;
+            const mouseY = event.clientY;
+            playerScale =
+              mouseX < player.offsetLeft - gameArea.scrollLeft ? -1 : 1;
+
+            objects.forEach((object) => {
+              // Get the center of the object
+              const rect = object.getBoundingClientRect();
+              const objectX = rect.left + rect.width / 2;
+              const objectY = rect.top + rect.height / 2;
+
+              // Calculate the angle between the mouse and the object
+              const angle =
+                Math.atan2(mouseY - objectY, mouseX - objectX) *
+                (180 / Math.PI);
+
+              const finalAngle = mouseX < objectX ? -angle : angle;
+              if (object.id === "current") {
+                currentAngle = finalAngle;
+              }
+              // Determine if the mouse is to the left or right of the object
+              // Rotate the object towards the mouse and apply scaling
+              object.style.transform = `rotate(${finalAngle}deg) scaleY(${playerScale}) scaleX(${playerScale})`;
+            });
+          }
+        });
+        gameArea.addEventListener("mousedown", (e) => {
+          mouseEvent = e;
+          isMouseDown = true;
+        });
+        gameArea.addEventListener("mouseup", (e) => {
+          mouseEvent = e;
+          isMouseDown = false;
+        });
+        GameLoop();
+      }
+      let players = [];
+      let velocityY = 0;
+      let px = 500;
+      let py = 0;
+      let TMP_touch = 0;
+      let TouchHight = false;
+      function isTouching(element, margin = 0) {
+        TMP_touch = null;
+        TouchHight = false;
+        let returnValue = false;
+        colliders.forEach((e) => {
+          if (isColliding(e, element, margin)) {
+            returnValue = true;
+          }
+        });
+        return returnValue;
+      }
+      let isPlayerTouchingH = false;
+      let isPlayerTouching = false;
+      let playerTouchLR = 0;
+      function GameLoop(e) {
+        try {
+          inGameItems.forEach((itemInGame) => {
+            if (!isTouching(itemInGame.item, 0)) {
+              itemInGame.velocityY += 0.1;
+            } else {
+              itemInGame.velocityY = -3;
+            }
+            itemInGame.item.style.top =
+              Number(itemInGame.item.style.top.split("px")[0]) +
+              itemInGame.velocityY +
+              "px";
+          });
+          if (wall) {
+            GenerateBuildPreview(
+              "wall",
+              gameArea.scrollLeft + mouseEvent.clientX,
+              mouseEvent.clientY
+            );
+          }
+          if (ramp) {
+            GenerateBuildPreview(
+              "ramp",
+              gameArea.scrollLeft + mouseEvent.clientX,
+              mouseEvent.clientY
+            );
+          }
+          if (cone) {
+            GenerateBuildPreview(
+              "cone",
+              gameArea.scrollLeft + mouseEvent.clientX,
+              mouseEvent.clientY
+            );
+          }
+          if (floor) {
+            GenerateBuildPreview(
+              "floor",
+              gameArea.scrollLeft + mouseEvent.clientX,
+              mouseEvent.clientY
+            );
+          }
+          if (isMouseDown) {
+            if (wall) {
+              generateBuild(
+                "wall",
+                gameArea.scrollLeft + mouseEvent.clientX,
+                mouseEvent.clientY
+              );
+            } else if (ramp) {
+              generateBuild(
+                "ramp",
+                gameArea.scrollLeft + mouseEvent.clientX,
+                mouseEvent.clientY
+              );
+            } else if (cone) {
+              generateBuild(
+                "cone",
+                gameArea.scrollLeft + mouseEvent.clientX,
+                mouseEvent.clientY
+              );
+            } else if (floor) {
+              generateBuild(
+                "floor",
+                gameArea.scrollLeft + mouseEvent.clientX,
+                mouseEvent.clientY
+              );
+            } else {
+              let e = mouseEvent;
+              if (!isAttacking && currentWeapon !== null) {
+                if (currentWeapon === "pickaxe" && !isPickaxing) {
+                  const net = true;
+                  const element = createElement(
+                    "div",
+                    "",
+                    px,
+                    py,
+                    5,
+                    5,
+                    "",
+                    false
+                  );
+                  gameArea.appendChild(element);
+                  moveElementToTarget(
+                    element,
+                    gameArea.scrollLeft + e.pageX,
+                    e.pageY,
+                    0.2,
+                    (e) => {
+                      let value = false;
+                      colliders.forEach((collider) => {
+                        if (isColliding(element, collider)) {
+                          value = true;
+                          if (collider.dataset["isbuild"] === "true") {
+                            const build =
+                              builds[Number(collider.dataset["buildid"])];
+                            build.life -= 20;
+                            console.log(build.life);
+                            if (build.life <= 0) {
+                              build.elements.forEach((buildPart) => {
+                                console.log(
+                                  colliders[colliders.indexOf(buildPart)]
+                                );
+                                socket.send(
+                                  JSON.stringify({
+                                    to: "relay",
+                                    type: "removeCollider",
+                                    data: {
+                                      id:
+                                        "" +
+                                        colliders[colliders.indexOf(buildPart)]
+                                          .dataset["id"],
+                                    },
+                                  })
+                                );
+                                if (colliders.indexOf(buildPart) !== -1) {
+                                  colliders.splice(
+                                    colliders.indexOf(buildPart),
+                                    1
+                                  );
+                                }
+                                if (buildPart !== null) {
+                                  buildPart.remove();
+                                }
+                              });
+                              socket.send(
+                                JSON.stringify({
+                                  to: "every",
+                                  type: "rmBuild",
+                                  data: Number(collider.dataset["buildid"]),
+                                })
+                              );
+                              delete builds[
+                                Number(collider.dataset["buildid"])
+                              ];
+                            }
+                          }
+                        }
+                      });
+                      players.forEach((plays) => {
+                        if (isColliding(element, plays)) {
+                          if (net) {
+                            socket.send(
+                              JSON.stringify({
+                                to: plays.dataset["uid"],
+                                type: "TakeDamage",
+                                data: {
+                                  damage: 20,
+                                },
+                              })
+                            );
+                          }
+                          value = true;
+                        }
+                      });
+                      return value;
+                    }
+                  );
+
+                  document.querySelector("#current").style.animation =
+                    "pickaxe " + 1 * speed + "s";
+                  isAttacking = true;
+                  setTimeout(() => {
+                    document.querySelector("#current").style.animation = "";
+                    isAttacking = false;
+                  }, 1000);
+                } else {
+                  if (items[currentWeapon].isWeapon === true) {
+                    if (
+                      ammo[inventory.indexOf(currentWeapon) - 1] > 0 &&
+                      new Date().getTime() >
+                        lastShoot + items[currentWeapon].wait
+                    ) {
+                      socket.send(
+                        JSON.stringify({
+                          to: "every",
+                          type: "shoot",
+                          data: {
+                            clientX: gameArea.scrollLeft + mouseEvent.clientX,
+                            clientY: mouseEvent.clientY,
+                            playerID: playerUID,
+                            cur: currentWeapon,
+                            px: px,
+                            py: py,
+                            s: playerScale,
+                          },
+                        })
+                      );
+                      isChanging = true;
+                      setTimeout(() => {
+                        isChanging = false;
+                      }, items[currentWeapon].wait);
+                      const rect = document
+                        .getElementById("current")
+                        .getBoundingClientRect();
+                      const objectX = rect.left + rect.width / 2;
+                      const objectY = rect.top + rect.height / 2;
+
+                      const angle =
+                        Math.atan2(
+                          mouseEvent.clientY - objectY,
+                          mouseEvent.clientX - objectX
+                        ) *
+                        (180 / Math.PI);
+
+                      const finalAngle =
+                        mouseEvent.clientX < objectX ? -angle : angle;
+
+                      animateFunction(
+                        (i) => {
+                          document.getElementById("current").style.transform =
+                            "rotate(" +
+                            Math.floor(
+                              finalAngle -
+                                (((i / items[currentWeapon].wait) *
+                                  items[currentWeapon].wait) /
+                                  1000) *
+                                  45
+                            ) +
+                            "deg) scaleX(" +
+                            playerScale +
+                            ") scaleY(" +
+                            playerScale +
+                            ")";
+                        },
+                        items[currentWeapon].wait,
+                        items[currentWeapon].wait / 1000
+                      );
+                      playAudio(items[currentWeapon].audio);
+                      ammo[inventory.indexOf(currentWeapon) - 1] -= 1;
+                      lastShoot = new Date().getTime();
+                      let f = { x: px - 80, y: py + 55 };
+                      if (playerScale === 1) {
+                        f = { x: px + 80, y: py + 55 };
+                      }
+                      fire(
+                        f,
+                        {
+                          x: gameArea.scrollLeft + e.pageX,
+                          y: e.pageY,
+                        },
+                        items[currentWeapon].duration,
+                        items[currentWeapon].damage
+                      );
+                      items[currentWeapon].customFunction(
+                        f,
+                        {
+                          x: gameArea.scrollLeft + e.pageX,
+                          y: e.pageY,
+                        },
+                        true
+                      );
+                    }
+                  } else if (currentWeapon === "shockwave") {
+                    const mouseX = gameArea.scrollLeft + mouseEvent.clientX;
+                    const mouseY = mouseEvent.clientY;
+                    const item = generateItem(
+                      mouseX,
+                      mouseY,
+                      "shockwave",
+                      randint(0, 10000000),
+                      true
+                    );
+                    document.querySelector(
+                      ".n" + (inventory.indexOf(currentWeapon) + 1)
+                    ).textContent = "none";
+                    inventory[inventory.indexOf(currentWeapon)] = null;
+                    currentWeapon = "pickaxe";
+                    document
+                      .querySelector(".currentInvCase")
+                      .classList.remove("currentInvCase");
+                    document
+                      .querySelector(".currentInvCase")
+                      .classList.remove("currentInvCase");
+                    document
+                      .querySelector(".n1")
+                      .classList.add("currentInvCase");
+                    document
+                      .querySelector(".c1")
+                      .classList.add("currentInvCase");
+                    currentWeapon = inventory[0];
+                    change();
+                    gameArea.appendChild(item.item);
+                    const index = inGameItems.push({
+                      velocityY: 0,
+                      item: item.item,
+                    });
+                    setTimeout(() => {
+                      socket.send(
+                        JSON.stringify({
+                          to: "relay",
+                          type: "takeItem",
+                          data: {
+                            x: item.x,
+                            y: item.y,
+                            obj: item.obj,
+                            item_id: item.id,
+                          },
+                        })
+                      );
+                      const x = item.item.offsetLeft;
+                      const y = item.item.offsetTop;
+                      const element = createElement(
+                        "div",
+                        "borderRadius",
+                        item.item.offsetLeft,
+                        item.item.offsetTop,
+                        300,
+                        300,
+                        "",
+                        true
+                      );
+                      gameArea.appendChild(element);
+
+                      inGameItems = inGameItems.splice(index, 1);
+                      item.item.remove();
+
+                      if (isColliding(player, element, 0)) {
+                        velocityY = -10;
+                      }
+                      players.forEach((plays) => {
+                        if (isColliding(plays, element, 0)) {
+                          socket.send(
+                            JSON.stringify({
+                              to: plays.dataset["uid"],
+                              type: "OtherVelcityUpdate",
+                              data: {
+                                v: -10,
+                              },
+                            })
+                          );
+                        }
+                      });
+                      animateFunction(
+                        (iteration) => {
+                          moveElement(element, x, y, iteration / 1000);
+                        },
+                        1000,
+                        0.3
+                      );
+                      setTimeout(() => {
+                        socket.send(
+                          JSON.stringify({
+                            to: "relay",
+                            type: "removeCollider",
+                            data: {
+                              id: element.dataset["id"],
+                            },
+                          })
+                        );
+                        element.remove();
+                      }, 300);
+                    }, 2000);
+                  } else if (currentWeapon === "medkit") {
+                    document.querySelector(
+                      ".n" + (inventory.indexOf(currentWeapon) + 1)
+                    ).textContent = "none";
+                    inventory[inventory.indexOf(currentWeapon)] = null;
+                    currentWeapon = "pickaxe";
+                    document
+                      .querySelector(".currentInvCase")
+                      .classList.remove("currentInvCase");
+                    document
+                      .querySelector(".currentInvCase")
+                      .classList.remove("currentInvCase");
+                    document
+                      .querySelector(".n1")
+                      .classList.add("currentInvCase");
+                    document
+                      .querySelector(".c1")
+                      .classList.add("currentInvCase");
+                    currentWeapon = inventory[0];
+                    change();
+                    playAudio("./velcro.mp3");
+                    isReloading = true;
+                    setTimeout(() => {
+                      isReloading = false;
+                      playerLife += 100;
+                      if (playerLife > 100) {
+                        playerLife = 100;
+                      }
+                      updateHealthBars();
+                    }, 3000);
+                  } else if (currentWeapon === "potion") {
+                    document.querySelector(
+                      ".n" + (inventory.indexOf(currentWeapon) + 1)
+                    ).textContent = "none";
+                    inventory[inventory.indexOf(currentWeapon)] = null;
+                    currentWeapon = "pickaxe";
+                    document
+                      .querySelector(".currentInvCase")
+                      .classList.remove("currentInvCase");
+                    document
+                      .querySelector(".currentInvCase")
+                      .classList.remove("currentInvCase");
+                    document
+                      .querySelector(".n1")
+                      .classList.add("currentInvCase");
+                    document
+                      .querySelector(".c1")
+                      .classList.add("currentInvCase");
+                    currentWeapon = inventory[0];
+                    change();
+                    playAudio("./potion.mp3");
+                    isReloading = true;
+                    setTimeout(() => {
+                      isReloading = false;
+                      playerShield += 50;
+                      if (playerShield > 100) {
+                        playerShield = 100;
+                      }
+                      updateHealthBars();
+                    }, 2000);
+                  }
+                }
+              }
+            }
+          }
+          if (isReloading) {
+            if (new Date().getTime() > ReloadingStart + 1000) {
+              isReloading = false;
+              if (items[currentWeapon] && items[currentWeapon].ammo) {
+                ammo[inventory.indexOf(currentWeapon) - 1] =
+                  items[currentWeapon].ammo;
+              }
+            }
+          }
+          handleKeys(keysPressed);
+          updateMarkers();
+          if (isTouching(player)) {
+            playerTouchLR = TMP_touch;
+            isPlayerTouching = true;
+            isPlayerTouchingH = TouchHight;
+            if (velocityY > 0 && velocityY != 0.156) {
+              velocityY = 0;
+            }
+          } else {
+            isPlayerTouching = false;
+            isPlayerTouchingH = TouchHight;
+            velocityY += 0.1;
+          }
+          gameArea.scrollLeft = px - gameArea.clientWidth / 2;
+          py += velocityY;
+          moveElement(player, px, py, playerScale);
+          if (py > 1500) {
+            py = 0;
+          }
+        } catch (e) {
+          console.log(e);
+        }
+        if (playerLife <= 0) {
+          animateFunction(
+            (i) => {
+              playerScale = (1000 - i) / 1000;
+              moveElement(player, px, py, (1000 - i) / 1000);
+            },
+            1000,
+            1
+          );
+          setTimeout(() => {
+            request(
+              localStorage.getItem("server"),
+              (result) => {
+                document.querySelector(".return").innerHTML =
+                  "<a href='./play.html'>Back to lobby</a>";
+              },
+              {
+                type: "loose",
+                username: localStorage.getItem("username"),
+                password: localStorage.getItem("password"),
+              }
+            );
+            socket.send(
+              JSON.stringify({
+                to: "relay",
+                type: "deadPlayer",
+                data: {},
+              })
+            );
+            isDead = true;
+            setInterval(() => {
+              deadFun();
+            }, 100);
+          }, 1500);
+        } else {
+          if (isDead) return;
+          if (players.length === 0 && isGS) {
+            setTimeout(() => {
+              player.style.transition = 1 + "s";
+              requestAnimationFrame(GameLoop);
+            }, 50);
+            if (!isWin) {
+              request(
+                localStorage.getItem("server"),
+                (result) => {
+                  document.querySelector(".return").innerHTML =
+                    "<a href='./play.html'>Back to lobby</a>";
+                },
+                {
+                  type: "win",
+                  username: localStorage.getItem("username"),
+                  password: localStorage.getItem("password"),
+                }
+              );
+              isWin = true;
+              document.querySelector(
+                ".win"
+              ).innerHTML = `<h1 class="winMessage">You WIN!</h1>`;
+              speed = 10;
+            }
+          } else {
+            if (!isWin) {
+              player.style.transition = "none";
+              requestAnimationFrame(GameLoop);
+              speed = 1;
+            }
+          }
+        }
+        if (players.length !== 0) {
+          isGS = true;
+        }
+      }
+      let isWin = false;
+      let isDead = false;
+      let isGS = false;
+      let speed = 1;
+      function choose(choices) {
+        var index = Math.floor(Math.random() * choices.length);
+        return choices[index];
+      }
+      let currentFollowPlayer = null;
+      function deadFun() {
+        if (currentFollowPlayer === null) {
+          currentFollowPlayer = choose(players);
+        }
+        if (currentFollowPlayer.dataset["isDead"] === "true") {
+          currentFollowPlayer = choose(players);
+        }
+        gameArea.scrollLeft =
+          Number(currentFollowPlayer.style.left.split("px")[0]) -
+          gameArea.clientWidth / 2;
+      }
+      function generateRandomGround(numSegments) {
+        const gameArea = document.getElementById("gameArea");
+        const gameWidth = gameArea.clientWidth;
+        const gameHeight = gameArea.clientHeight - 100;
+
+        let lastX = 0;
+        let lastY = gameHeight - 50; // Start near the bottom of the game area
+
+        for (let i = 0; i < numSegments; i++) {
+          const groundSegment = document.createElement("div");
+          groundSegment.classList.add("groundSegment");
+
+          const segmentWidth = Math.random() * 100 + 50; // Random width between 50 and 150px
+
+          // Ensure segments connect logically
+          const segmentX = lastX;
+          const segmentY = lastY + (Math.random() * 40 - 20); // Small vertical variation
+          const segmentHeight = gameArea.clientHeight - segmentY; // Fixed height
+
+          groundSegment.style.width = `${segmentWidth}px`;
+          groundSegment.style.height = `${segmentHeight}px`;
+          groundSegment.style.left = `${segmentX}px`;
+          groundSegment.style.top = `${segmentY}px`;
+
+          gameArea.appendChild(groundSegment);
+          colliders.push(groundSegment);
+          lastX += segmentWidth; // Move x position to the end of the last segment
+          lastY = segmentY;
+        }
+      }
+
+      socket.onclose = function (event) {
+        if (event.wasClean) {
+          console.log(
+            `Closed cleanly, code=${event.code} reason=${event.reason}`
+          );
+        } else {
+          console.error("Connection died");
+        }
+      };
+      let playerUID = "";
+      socket.onmessage = function (event) {
+        const data = JSON.parse(event.data);
+        if (data["to"] === "replay") {
+          replay[time()] = {
+            data: data,
+          };
+        }
+        if (
+          data["to"] === "every" ||
+          data["to"] === playerUID ||
+          data["to"] === "you"
+        ) {
+          replay[time()] = {
+            data: data,
+          };
+          if (data["type"] === "newPlayer") {
+            if (data["data"] !== playerUID) {
+              const gameArea = document.getElementById("gameArea");
+              const element = createElement(
+                "div",
+                "player oplayer",
+                0,
+                0,
+                50,
+                200,
+                `<img src='PICKAXE.png' id='current' width='75' class='movable weapon pickaxe'></img>
+                <img src='ak47.png' height='40' id='notSelected' class='movable weapon ar'></img>
+                <img src='snipe.png' height='30' id='notSelected' class='movable weapon snipe'></img>
+                <img src='shotgun.webp' height='70' id='notSelected' class='movable weapon pomp'></img>
+                <img src='shockwave.png' height='50' id='notSelected' class='movable weapon shockwave'></img>
+                <img src='medkit.webp' height='50' id='notSelected' class='movable weapon medkit'></img>
+                <img src='potion.webp' height='40' id='notSelected' class='movable weapon potion'></img>`
+              );
+              element.dataset["uid"] = data["data"];
+              gameArea.appendChild(element);
+              players.push(element);
+            }
+          } else if (data["type"] === "setUID") {
+            playerUID = data["data"];
+          } else if (data["type"] === "updatePlayer") {
+            document.querySelectorAll(".player").forEach((playerS) => {
+              if (playerS.dataset["uid"] === data["data"].playerID) {
+                playerS.style.backgroundImage =
+                  "url(" + data["data"].skin.src + ")";
+                if (player.size !== -1) {
+                  playerS.style.width = data["data"].skin.size + "px";
+                }
+
+                moveElement(
+                  playerS,
+                  data["data"].x,
+                  data["data"].y,
+                  data["data"].s
+                );
+                if (
+                  !data["data"].ch &&
+                  playerS.dataset["isShooting"] !== "yes"
+                ) {
+                  const mouseX = data["data"].mx;
+                  const mouseY = data["data"].my;
+                  playerS.querySelector(
+                    "#current"
+                  ).style.transform = `rotate(${data["data"].a}deg) scaleY(${data["data"].s}) scaleX(${data["data"].s})`;
+                }
+                if (data["data"].ch) {
+                  playerS
+                    .querySelectorAll(".weapon")
+                    .forEach((e) => (e.style.display = "none"));
+                  playerS
+                    .querySelectorAll(".weapon")
+                    .forEach((e) => (e.id = "notSelected"));
+                  if (data["data"].cur === "ar") {
+                    playerS.querySelector(".ar").style.display = "block";
+                    playerS.querySelector(".ar").id = "current";
+                    playerS.querySelector(".ar").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  } else if (data["data"].cur === "snipe") {
+                    playerS.querySelector(".snipe").style.display = "block";
+                    playerS.querySelector(".snipe").id = "current";
+                    playerS.querySelector(".snipe").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  } else if (data["data"].cur === "pickaxe") {
+                    playerS.querySelector(".pickaxe").style.display = "block";
+                    playerS.querySelector(".pickaxe").id = "current";
+                    playerS.querySelector(".pickaxe").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  } else if (data["data"].cur === "pomp") {
+                    playerS.querySelector(".pomp").style.display = "block";
+                    playerS.querySelector(".pomp").id = "current";
+                    playerS.querySelector(".pomp").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  } else if (data["data"].cur === "shockwave") {
+                    playerS.querySelector(".shockwave").style.display = "block";
+                    playerS.querySelector(".shockwave").id = "current";
+                    playerS.querySelector(".shockwave").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  } else if (data["data"].cur === "medkit") {
+                    playerS.querySelector(".medkit").style.display = "block";
+                    playerS.querySelector(".medkit").id = "current";
+                    playerS.querySelector(".medkit").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  } else if (data["data"].cur === "potion") {
+                    playerS.querySelector(".potion").style.display = "block";
+                    playerS.querySelector(".potion").id = "current";
+                    playerS.querySelector(".potion").style.animation =
+                      "change " + 1 * speed + "s forwards";
+                  }
+                  isChanging = true;
+                  setTimeout(() => {
+                    playerS
+                      .querySelectorAll(".weapon")
+                      .forEach((e) => (e.style.animation = "none"));
+                    isChanging = false;
+                  }, 1000);
+                }
+              }
+            });
+          } else if (data["type"] === "setCollider") {
+            const element = createElement(
+              data["data"]["type"],
+              data["data"]["class"],
+              data["data"]["x"],
+              data["data"]["y"],
+              data["data"]["width"],
+              data["data"]["height"],
+              data["data"]["innerHTML"],
+              false,
+              data["data"]["id"]
+            );
+            document.getElementById("gameArea").appendChild(element);
+            if (data["data"].c) {
+              colliders.push(element);
+            }
+          } else if (data["type"] === "setChest") {
+            generateDrop(data["data"]);
+          } else if (data["type"] === "setColliders") {
+            data["data"].forEach((collider) => {
+              const element = createElement(
+                collider["type"],
+                collider["class"],
+                collider["x"],
+                collider["y"],
+                collider["width"],
+                collider["height"],
+                collider["innerHTML"],
+                false,
+                collider.id
+              );
+              document.getElementById("gameArea").appendChild(element);
+              if (collider["c"]) {
+                colliders.push(element);
+              }
+            });
+            init();
+
+            px = randint(
+              500,
+              document.getElementById("gameArea").scrollWidth / 2
+            );
+          } else if (data["type"] === "setChests") {
+            data["data"].forEach((chest) => {
+              generateDrop(chest);
+            });
+          } else if (data["type"] === "updateCollider") {
+            const collider = document.getElementById("e_" + data["data"]["id"]);
+            moveElement(
+              collider,
+              data["data"]["x"],
+              data["data"]["y"],
+              data["data"]["s"],
+              true
+            );
+          } else if (data["type"] === "openChest") {
+            document.querySelectorAll(".chest").forEach((chest) => {
+              if (Number(chest.style.left.split("px")[0]) === data["data"].x) {
+                chest.remove();
+              }
+            });
+          } else if (data["type"] === "openChest") {
+            document.querySelectorAll(".chest").forEach((chest) => {
+              if (Number(chest.style.left.split("px")[0]) === data["data"].x) {
+                chest.remove();
+              }
+            });
+          } else if (data["type"] === "takeItem") {
+            for (let i = 0; i < inGameItems.length; i++) {
+              const item = inGameItems[i];
+              if (item.item.id === data["data"].item_id) {
+                inGameItems.splice(i + 1, 1);
+              }
+            }
+            document.getElementById("i_" + data["data"].item_id).remove();
+          } else if (data["type"] === "removeCollider") {
+            for (let i = 0; i < colliders.length; i++) {
+              const collider = colliders[i];
+              if (colliders.id === data["data"].id) {
+                colliders.splice(i + 1, 1);
+              }
+            }
+            document.getElementById("e_" + data["data"].id).remove();
+          } else if (data["type"] === "setItem") {
+            generateItem(
+              data["data"].x,
+              data["data"].y,
+              data["data"].obj,
+              data["data"].item_id,
+              false
+            );
+          } else if (data["type"] === "setItems") {
+            data["data"].forEach((chest) => {
+              generateItem(
+                chest["data"].x,
+                chest["data"].y,
+                data["data"].obj,
+                chest["data"].item_id,
+                false
+              );
+            });
+          } else if (data["type"] === "OtherVelcityUpdate") {
+            velocityY = data["data"].v;
+          } else if (data["type"] === "shoot") {
+            document.querySelectorAll(".player").forEach((playerS) => {
+              if (playerS.dataset["uid"] === data["data"].playerID) {
+                playerS.dataset["isShooting"] = "yes";
+                setTimeout(() => {
+                  playerS.dataset["isShooting"] = "no";
+                }, items[data["data"].cur].time);
+                const rect = playerS
+                  .querySelector("#current")
+                  .getBoundingClientRect();
+                const objectX = rect.left + rect.width / 2;
+                const objectY = rect.top + rect.height / 2;
+
+                const angle =
+                  Math.atan2(
+                    data["data"].clientY - objectY,
+                    data["data"].clientX - objectX
+                  ) *
+                  (180 / Math.PI);
+
+                const finalAngle =
+                  data["data"].clientX < objectX ? -angle : angle;
+                animateFunction(
+                  (i) => {
+                    playerS.querySelector("#current").style.transform =
+                      "rotate(" +
+                      Math.floor(
+                        finalAngle -
+                          (((i / items[data["data"].cur].wait) *
+                            items[data["data"].cur].wait) /
+                            1000) *
+                            45
+                      ) +
+                      "deg) scaleX(" +
+                      data["data"].s +
+                      ") scaleY(" +
+                      data["data"].s +
+                      ")";
+                  },
+                  items[data["data"].cur].wait,
+                  items[data["data"].cur].wait / 1000
+                );
+                let f = { x: data["data"].px - 80, y: data["data"].py + 55 };
+                if (data["data"].s === 1) {
+                  f = { x: data["data"].px + 80, y: data["data"].py + 55 };
+                }
+                fire(
+                  f,
+                  {
+                    x: data["data"].clientX,
+                    y: data["data"].clientY,
+                  },
+                  items[data["data"].cur].duration,
+                  items[data["data"].cur].damage,
+                  false
+                );
+                items[data["data"].cur].customFunction(
+                  f,
+                  {
+                    x: data["data"].clientX,
+                    y: data["data"].clientY,
+                  },
+                  false
+                );
+              }
+            });
+          } else if (data["type"] === "pickaxe") {
+            document.querySelectorAll(".player").forEach((playerS) => {
+              if (playerS.dataset["uid"] === data["data"].playerID) {
+                playerS.querySelector("#current").style.animation =
+                  "pickaxe " + 1 * speed + "s";
+                setTimeout(() => {
+                  playerS.querySelector("#current").style.animation = "";
+                }, 1000);
+              }
+            });
+          } else if (data["type"] === "TakeDamage") {
+            TakeDamage(data["data"].damage);
+          } else if (data["type"] === "PlayAudio") {
+            playAudio(data["data"], false);
+          } else if (data["type"] === "rmBuild") {
+            damageBuildById(data["data"]);
+          } else if (data["type"] === "addBuild") {
+            const segments = [];
+            data["data"]["elements"].forEach((id) => {
+              document.getElementById(id).dataset["isbuild"] = "true";
+              document.getElementById(id).dataset["buildid"] =
+                data["data"]["id"];
+              segments.push(document.getElementById(id));
+            });
+
+            builds[data["data"]["id"]] = {
+              type: data["data"]["type"],
+              x: data["data"]["x"],
+              y: data["data"]["y"],
+              elements: segments,
+              life: data["data"]["life"],
+            };
+          } else if (data["type"] === "deadPlayer") {
+            document.querySelectorAll(".player").forEach((playerS) => {
+              if (playerS.dataset["uid"] === data["data"]) {
+                playerS.dataset["isDead"] = true;
+                players.splice(players.indexOf(playerS), 1);
+                playerS.classList.add("dead");
+              }
+            });
+          }
+        }
+      };
+
+      socket.onopen = function (e) {
+        console.log(e);
+      };
+    </script>
+  </body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Slide Navbar</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <script>
+      const queryString = window.location.search;
+      const urlParams = new URLSearchParams(queryString);
+      if (
+        localStorage.getItem("server") &&
+        localStorage.getItem("username") &&
+        localStorage.getItem("password") &&
+        !urlParams.has("force")
+      ) {
+        window.location = "play.html";
+      }
+    </script>
+    <div class="main">
+      <input type="checkbox" id="chk" aria-hidden="true" />
+
+      <div class="signup">
+        <label for="chk" aria-hidden="true">Sign up</label>
+        <h4 style="color: white">
+          Official Loines's server address is: http://178.195.74.241:3069
+        </h4>
+        <input
+          type="text"
+          name="server"
+          class="server"
+          placeholder="Server Address"
+          required=""
+          value="http://178.195.74.241:3069"
+        />
+        <input
+          type="text"
+          class="username"
+          name="user"
+          placeholder="Username"
+          required=""
+        />
+        <input
+          type="password"
+          class="password"
+          name="pswd"
+          placeholder="Password"
+          required=""
+        />
+        <button class="create_account">Sign up</button>
+      </div>
+
+      <div class="login">
+        <label for="chk" aria-hidden="true">Login</label>
+        <input
+          type="text"
+          name="Lserver"
+          class="Lserver"
+          placeholder="Server Address"
+          required=""
+          value="178.195.74.241:3069"
+        />
+        <input
+          type="text"
+          class="Lusername"
+          name="user"
+          placeholder="Username"
+          required=""
+        />
+        <input
+          type="password"
+          class="Lpassword"
+          name="pswd"
+          placeholder="Password"
+          required=""
+        />
+        <button class="login_button">Login</button>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="./lib.request.js"></script>
+    <script>
+      document
+        .querySelector(".create_account")
+        .addEventListener("click", () => {
+          request(
+            document.querySelector(".server").value,
+            (te) => {
+              Swal.fire({
+                title: "Account successfully created!",
+                text: "You will be retected to the game",
+                icon: "success",
+              }).then(() => {
+                localStorage.setItem(
+                  "username",
+                  document.querySelector(".username").value
+                );
+                localStorage.setItem(
+                  "password",
+                  document.querySelector(".password").value
+                );
+                localStorage.setItem(
+                  "server",
+                  document.querySelector(".server").value
+                );
+                localStorage.setItem("skin", "default");
+                window.location = "play.html";
+              });
+            },
+            {
+              type: "createAccount",
+              username: document.querySelector(".username").value,
+              password: document.querySelector(".password").value,
+            }
+          );
+        });
+      document.querySelector(".login_button").addEventListener("click", () => {
+        request(
+          document.querySelector(".Lserver").value,
+          (te) => {
+            Swal.fire({
+              title: "You are successfully logged!",
+              text: "You will be retected to the game",
+              icon: "success",
+            }).then(() => {
+              localStorage.setItem(
+                "username",
+                document.querySelector(".Lusername").value
+              );
+              localStorage.setItem(
+                "password",
+                document.querySelector(".Lpassword").value
+              );
+              localStorage.setItem(
+                "server",
+                document.querySelector(".Lserver").value
+              );
+              localStorage.setItem("skin", "default");
+              window.location = "play.html";
+            });
+          },
+          {
+            type: "get_user_infos",
+            username: document.querySelector(".Lusername").value,
+            password: document.querySelector(".Lpassword").value,
+          }
+        );
+      });
+    </script>
+    <div class="self_hosted">
+      <a href="https://github.com/ATLAbanana35/nitued"
+        >Host your OWN server of Nitued!</a
+      >
+    </div>
+    <style>
+      .self_hosted {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+      }
+      a {
+        color: white;
+        text-decoration: none;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: "Jost", sans-serif;
+        background: linear-gradient(to bottom, #0f0c29, #302b63, #24243e);
+      }
+      .main {
+        width: 350px;
+        height: 600px;
+        background: red;
+        overflow: hidden;
+        background: url("https://doc-08-2c-docs.googleusercontent.com/docs/securesc/68c90smiglihng9534mvqmq1946dmis5/fo0picsp1nhiucmc0l25s29respgpr4j/1631524275000/03522360960922298374/03522360960922298374/1Sx0jhdpEpnNIydS4rnN4kHSJtU1EyWka?e=view&authuser=0&nonce=gcrocepgbb17m&user=03522360960922298374&hash=tfhgbs86ka6divo3llbvp93mg4csvb38")
+          no-repeat center/ cover;
+        border-radius: 10px;
+        box-shadow: 5px 20px 50px #000;
+      }
+      #chk {
+        display: none;
+      }
+      .signup {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      label {
+        color: #fff;
+        font-size: 2.3em;
+        justify-content: center;
+        display: flex;
+        margin: 50px;
+        font-weight: bold;
+        cursor: pointer;
+        transition: 0.5s ease-in-out;
+      }
+      input {
+        width: 60%;
+        height: 10px;
+        background: #e0dede;
+        justify-content: center;
+        display: flex;
+        margin: 20px auto;
+        padding: 12px;
+        border: none;
+        outline: none;
+        border-radius: 5px;
+      }
+      button {
+        width: 60%;
+        height: 40px;
+        margin: 10px auto;
+        justify-content: center;
+        display: block;
+        color: #fff;
+        background: #573b8a;
+        font-size: 1em;
+        font-weight: bold;
+        margin-top: 30px;
+        outline: none;
+        border: none;
+        border-radius: 5px;
+        transition: 0.2s ease-in;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #6d44b8;
+      }
+      .login {
+        height: 460px;
+        background: #eee;
+        border-radius: 60% / 10%;
+        transform: translateY(-180px);
+        transition: 0.8s ease-in-out;
+      }
+      .login label {
+        color: #573b8a;
+        transform: scale(0.6);
+      }
+
+      #chk:checked ~ .login {
+        transform: translateY(-500px);
+      }
+      #chk:checked ~ .login label {
+        transform: scale(1);
+      }
+      #chk:checked ~ .signup label {
+        transform: scale(0.6);
+      }
+    </style>
+  </body>
+</html>
